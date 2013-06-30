@@ -12,7 +12,7 @@ usage: mmll.py [-h] -c CONFIGFILE [-o OUTPUTFILE] [-d {0,1,2,3,4}]
 optional arguments:
   -h, --help            show this help message and exit
   -c CONFIGFILE, --configfile CONFIGFILE
-                        The logging config file
+                         The logging config file
   -o OUTPUTFILE, --outputfile OUTPUTFILE
                         The desired output log file - No entry outputs log
                         data to STDOUT
