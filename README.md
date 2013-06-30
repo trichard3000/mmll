@@ -53,7 +53,7 @@ cfg file:
 SamplesPerSecond - Different host systems will have different max values.
 
 The log file output is also "cloned" from ME7Logger as this was the easiest
-way to provide instant compatibility for the logs graphed with ECUxPlot.
+way to provide instant compatibility for the logs to be graphed with ECUxPlot.
 
 ECUxPlot can be found at:
 http://nyet.org/cars/ECUxPlot/
