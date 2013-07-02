@@ -2,11 +2,12 @@ mmll
 ====
 
 the Most Minimal Linux Logger
+
 Copyright 2013 Ted Richardson.
 Distributed under the terms of the GNU General Public License (GPL)
 See LICENSE.txt for licensing information.
 
-
+<pre>
 usage: mmll.py [-h] -c CONFIGFILE [-o OUTPUTFILE] [-d {0,1,2,3,4}]
 
 optional arguments:
@@ -18,7 +19,7 @@ optional arguments:
                         data to STDOUT
   -d {0,1,2,3,4}, --debug {0,1,2,3,4}
                         Increase the Debug Level (experimental)
-
+</pre>
 
 Notes:
 
@@ -42,7 +43,7 @@ from there.
 Because I was shooting for minimal KWP2000 functionality, only the following 
 communication config is currently supported:
 
-FTDI only
+FTDI only - ** Requires pylibftdi  **
 
 ecu file:
 Connect     = SLOW-0x11
