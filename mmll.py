@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
 '''
-the Most Minimal Linux Logger
+mmll.py
+- the Most Minimal Linux Logger
+
 Copyright 2013 Ted Richardson.
 Distributed under the terms of the GNU General Public License (GPL)
-See LICENSE for licensing information.
-
+See LICENSE.txt for licensing information.
 
 usage: mmll.py [-h] -c CONFIGFILE [-o OUTPUTFILE] [-d {0,1,2,3,4}]
 
@@ -37,132 +38,11 @@ trichard3000
 '''
 
 from __future__ import print_function, division
-import sys, time, threading, Queue, argparse, re
-from pylibftdi import Device, BitBangDevice  # This may need to be installed separately
+import sys, time, argparse
+import pylibme7
+from me7lconfig import *
 
 debug = 0   # Default debug value.  Can be overridden from the command line.
-
-# Set up serial port globally
-ser = Device(mode='b', lazy_open=True)
-
-def parseconfigfile(pf):
-   listout = []
-   # cfglistout: ECUfile, Samples, Version, Connect, Communicate, LogSpeed,
-   #       ...   HWNumber, SWNumber, PartNumber, SWVersion, EngineId
-   cfglistout = [ '', '', '', '', '', '', '', '', '', '', '' ]
-   cfgfile = open(pf)
-   for line in cfgfile:
-      lineout = []
-      firstfield = ""
-      secondfield = ""
-      cfgout = line.replace('\t'," ").strip()
-
-      if cfgout != '':  # if the line isn't empty
-         if cfgout.strip()[0] != '[':  # if the field doesn't start w '['
-            firstfieldlen = cfgout.find(';')  # find if there's a ";"
-            if firstfieldlen != 0:  # if the ";" isn't first
-               if firstfieldlen != -1:   # if there is a ";" somewhere
-                  parseline = cfgout[:firstfieldlen].strip()  # pull up to ";"
-               else:
-                  parseline = cfgout.strip()  # is there isn't a ";" pull whole line
-
-               secondfieldstart = parseline.find(' ')
-               if secondfieldstart != -1:
-                  firstfield = parseline[:secondfieldstart]
-                  secondfield = parseline[secondfieldstart:].strip()
-                  if secondfield[0] == "=":
-                     secondfield = secondfield[1:].strip()
-                  secondfieldlen = secondfield.find(' ')
-                  if secondfieldlen > 0:
-                     secondfield = secondfield[:secondfieldlen].strip()
-               else:
-                  firstfield = parseline
-                  secondfield = ""
-               lineout = [ firstfield ] + [ secondfield ]
-               if lineout[0] == 'ECUCharacteristics':
-                  cfglistout[0] = lineout[1]
-               elif lineout[0] == 'SamplesPerSecond':
-                  cfglistout[1] = lineout[1]
-               else:
-                  listrecord = geteculine(cfglistout[0], lineout[0])
-
-                  # Cleanup curly brackets around aliases
-                  if listrecord[1][0] == '{':
-                     listrecord[1] = listrecord[1][1:]
-                  if listrecord[1][-1] == '}':
-                     listrecord[1] = listrecord[1][:len(listrecord)]
-
-                  if len(lineout) >= 2:
-                     if lineout[1] != "":
-                        listrecord[1] = lineout[1]
-                  listout = listout + [ listrecord ]
-
-   ecufile = open(cfglistout[0])
-   for line in ecufile:
-      lineout = []
-      firstfield = ""
-      secondfield = ""
-      cfgout = line.replace('\t'," ").strip()
-
-      if cfgout != '':  # if the line isn't empty
-         if cfgout.strip()[0] != '[':  # if the field doesn't start w '['
-            firstfieldlen = cfgout.find(';')  # find if there's a ";"
-            if firstfieldlen != 0:  # if the ";" isn't first
-               if firstfieldlen != -1:   # if there is a ";" somewhere
-                  parseline = cfgout[:firstfieldlen].strip()  # pull up to ";"
-               else:
-                  parseline = cfgout.strip()  # is there isn't a ";" pull whole$
-
-               secondfieldstart = parseline.find(' ')
-               if secondfieldstart != -1:
-                  firstfield = parseline[:secondfieldstart]
-                  secondfield = parseline[secondfieldstart:].strip()
-                  if secondfield[0] == "=":
-                    secondfield = secondfield[1:].strip()
-                  secondfieldlen = secondfield.find(';')
-                  if secondfieldlen > 0:
-                     secondfield = secondfield[:secondfieldlen].strip()
-               else:
-                  firstfield = parseline
-                  secondfield = ""
-               lineout = [ firstfield ] + [ secondfield ]
-
-               if lineout[0] == 'Version':
-                  cfglistout[2] = lineout[1]
-               elif lineout[0] == 'Connect':
-                  cfglistout[3] = lineout[1]
-               elif lineout[0] == 'Communicate':
-                  cfglistout[4] = lineout[1]
-               elif lineout[0] == 'LogSpeed':
-                  cfglistout[5] = lineout[1]
-               elif lineout[0] == 'HWNumber':
-                  cfglistout[6] = lineout[1][1:-1]
-               elif lineout[0] == 'SWNumber':
-                  cfglistout[7] = lineout[1][1:-1]
-               elif lineout[0] == 'PartNumber':
-                  cfglistout[8] = lineout[1][1:-1]
-               elif lineout[0] == 'SWVersion':
-                  cfglistout[9] = lineout[1][1:-1]
-               elif lineout[0] == 'EngineId':
-                  cfglistout[10] = lineout[1][1:-1]
-
-   listout = [ cfglistout ] + listout
-   cfgfile.close()
-   return listout
-
-def geteculine(gf, value):
-   varinfo = []
-   match = False
-   ecufile = open(gf)
-   for line in ecufile:
-      if line[:len(value)] == value:
-         varinfo = re.split(',',line)
-         #insert alias from CFG file
-         for i in range(len(varinfo)):
-            varinfo[i] = varinfo[i].strip()
-         break
-   ecufile.close()
-   return varinfo
 
 def printconfig(config):
    # Print out the config info
@@ -183,320 +63,14 @@ def printconfig(config):
    print("SWVersion   : " + config[0][9] )
    print("EngineID    : " + config[0][10] )
 
-def bbang(bba):
-   # Take the one-byte address to "bit bang" and bang the port
-   bbser = BitBangDevice()
-   bbser.open()
-   bbser.direction = 0x01
-   bbser.port = 1
-   time.sleep(.5)
-   bbser.port = 0
-   outstr = "><"
-   sys.stdout.write('\r' + outstr)
-   sys.stdout.flush()
-   time.sleep(.2)
-   bbbitmask = 1
-   for i in range(8):
-      if (bba[0] & bbbitmask) > 0:
-         outbit = 1
-      else:
-         outbit = 0   
-      bbser.port = outbit
-      outstr = ">" + str(outbit) + outstr[1:] 
-      sys.stdout.write('\r' + outstr)
-      sys.stdout.flush()
-      bbbitmask = bbbitmask * 2
-      time.sleep(.2)
-   bbser.port = 1
-   sys.stdout.write("\n")
-   bbser.close()
-
-def waitfor(wf):
-   # This was used for debugging and really is only used for the init at this point.
-   # wf should be a list with the timeout in the last element
-   isfound = False
-   idx = 0
-   foundlist = []
-   capturebytes = []
-   to = wf[-1]
-   timecheck = time.time()
-   while (time.time() <= (timecheck+to)) & (isfound == False): 
-      try:
-         recvbyte = recvqueuegetraw(1)
-         if recvbyte != "":
-            recvdata = ord(recvbyte)
-            capturebytes = capturebytes + [ recvdata ]
-            if recvdata == wf[idx]: 
-               foundlist = foundlist + [ recvdata ]
-               idx = idx + 1
-            else: 
-               foundlist = []
-               idx = 0
-            if idx == len(wf)-1:
-               isfound = True
-      except:
-         print('error')
-         break
-   return [ isfound, foundlist, capturebytes ]
-
-def dumpqueue():
-   # Used for debugging.  Just keeps dumping reads.
-   while True:
-      try:
-         recvdata = recvqueueget(1)
-      except:
-         break
-
-def sendqueueadd(sendlist):
-   # Puts every byte in the sendlist into the sendqueue for service by thread
-   for i in sendlist:
-      ser.write(chr(i))
-
-def recvqueuegetraw(bytes):
-   recvdata = ser.read(bytes)
-   return recvdata
-
-
-def recvqueueget(bytes):
-   isread = False
-   while isread == False:
-      recvbyte = ser.read(bytes)
-      if recvbyte != "":
-         recvdata = recvbyte
-         isread = True
-   return recvdata      
-
-def sendcommand(sendlist):
-   # Wraps raw KWP command in a length byte and a checksum byte and hands it to sendqueueadd()
-   sendlist = [ len(sendlist) ] + sendlist 
-   sendlist = sendlist + [ checksum(sendlist) ] 
-   sendqueueadd(sendlist)
-   cmdval = commandvalidate(sendlist)
-
-def commandvalidate(command):
-   # Every KWP command is echoed back.  This clears out these bytes.
-   commandvalidate = True
-   for i in range( len(command) ):
-      recvdata = recvqueueget(1)
-      if ord(recvdata) != command[i]:
-         commandvalidate = commandvalidate & False
-   return commandvalidate   
-
-def checksum(checklist):
-   # Calculates the simple checksum for the KWP command bytes.
-   checksum = 0
-   for i in checklist:
-      checksum = checksum + i
-   checksum = (checksum & 0xFF) % 0xFF
-   return checksum
-
-def getresponse():
-   # gets a properly formated KWP responce from a command and returns the data. 
-   debugneeds = 4
-   numbytes = 0x00
-   while numbytes == 0x00:     # This is a hack because sometimes responses have leading 0x00's.  Why?  This removes them.
-      numbytes = ord(recvqueueget(1))
-   getresponse = [ numbytes ]
-   if debug >= debugneeds: print("Get bytes: " + hex(numbytes))
-   for i in range( numbytes ):
-      recvdata = ord(recvqueueget(1))
-      if debug >= debugneeds: print("Get byte" + str(i) + ": " + hex(recvdata))
-      getresponse = getresponse + [ recvdata ]
-   checkbyte = recvqueueget(1)
-   if debug >= debugneeds: print(getresponse)
-   if debug >= debugneeds: print("GR: " + hex(ord(checkbyte)) + "<-->" + hex(checksum(getresponse))) 
-   return (getresponse + [ ord(checkbyte) ])
-   
-
-def readecuid(paramdef):
-   # KWP2000 command to pull the ECU ID
-   debugneeds = 4
-   reqserviceid = [ 0x1A ]
-   sendlist = reqserviceid + paramdef
-   if debug >= debugneeds: print( sendlist )
-   sendcommand(sendlist)
-   response = getresponse()
-   if debug >= debugneeds: print(response)
-   return response
-
-def stopcomm():
-   # KWP2000 command to tell the ECU that the communications is finished
-   stopcommunication = [ 0x82 ]
-   sendlist = stopcommunication
-   sendcommand(sendlist)
-   response = getresponse()
-   return response
-
-def startdiagsession(bps):
-   # KWP2000 setup that sets the baud for the logging session
-   startdiagnosticsession = [ 0x10 ]
-   setbaud = [ 0x86 ]  #Is this the actual function of 0x86?
-#   if bps == 10400:
-#      bpsout = 0x5f
-#   if bps == 14400:
-#      bpsout = 0x60
-#   if bps == 19200:
-#      bpsout = 0x61
-   if bps == 38400:
-      bpsout = 0x50
-   if bps == 56000:
-      bpsout = 0x63
-   if bps == 57600:
-      bpsout = 0x64
-#   if bps == 125000:
-#      bpsout = 0x65
-   sendlist = startdiagnosticsession + setbaud + [ bpsout ]
-   sendcommand(sendlist)
-   response = getresponse()
-   ser.baudrate = bps
-   time.sleep(1)
-   return response
-
-def accesstimingparameter():
-   # KWP2000 command to access timing parameters
-   accesstiming_setval = [ 0x083, 0x03 ]
-   p2min = [ 0x00 ]
-   p2max = [ 0x01 ]
-   p3min = [ 0x00 ]
-   p3max = [ 0x14 ]
-   p4min = [ 0x00 ]
-   accesstiming = accesstiming_setval + p2min + p2max + p3min + p3max + p4min
-   sendlist = accesstiming
-   sendcommand(sendlist)
-   response = getresponse()
-   return response
-
-def readmembyaddr(readvals):
-   # Function to read an area of ECU memory.
-   debugneeds = 4
-   rdmembyaddr = [ 0x23 ]
-   sendlist = rdmembyaddr + readvals
-   if debug >= debugneeds: print("readmembyaddr() sendlist: " + hexlist(sendlist) )
-   sendcommand(sendlist)
-   response = getresponse()
-   if debug >= debugneeds: print("readmembyaddr() response: " + hexlist(response) )
-   return response
-
-def writemembyaddr(writevals):
-   # Function to write to an area of ECU memory.
-   debugneeds = 4
-   wrmembyaddr = [ 0x3D ]
-   sendlist = wrmembyaddr + writevals
-   if debug >= debugneeds: print("writemembyaddr() sendlist: " + hexlist(sendlist) )
-   sendcommand(sendlist)
-   response = getresponse()
-   if debug >= debugneeds: print("writemembyaddr() response: " + hexlist(response) )
-   return response
-
-def testerpresent():
-   # KWP2000 TesterPresent command
-   tp = [ 0x3E ]
-   sendlist = tp
-   sendcommand(sendlist)
-   response = getresponse()
-   return response
-
-def getrecord():
-   # Command to request the actual logging record
-   gr = [ 0xb7 ]
-   sendlist = gr
-   starttime = time.time()
-   sendcommand(sendlist)
-   response = getresponse()
-   return response
-
 def textlist(tl):
-   # Outputs a list of bytes as their ASCII characters.
+   # Outputs a list of bytes as a string of the corresponding ASCII characters.
    debugneeds = 4
    textresponse = ""
    for i in range(len(tl)-4):
       textresponse = textresponse + chr(tl[i+3])
    if debug >= debugneeds: print( "textlist() response: " + textresponse )
    return textresponse
-
-def hexlist(hl):
-   # Outputs a list of bytes in hex
-   hexlist = "[ "
-   for i in range(len(hl)):
-      hexlist = hexlist + hex( hl[i] )
-      if i < ( len(hl) - 1 ):
-         hexlist = hexlist + ", "
-   hexlist = hexlist + " ]"
-   return hexlist
-
-def dumpsendhexstring(dumpstring):
-   # Takes a list of characters as a string, turns every two characters into a hex byte and sends it.  
-   for i in range(len(dumpstring)/2):
-      sendqueueadd([ int('0x'+dumpstring[i*2:(i*2)+2],16) ])
-
-def logheader(config):
-   #  Creates headers for the log file from the config files.
-   headers = [ '' ]
-   headers = headers + [ ''.ljust(83,chr(0x23)) ]
-   headers = headers + [ 'Logfile created by ME7-Logger Clone: ' + sys.argv[0] ]
-   headers = headers + [ '' ]
-   headers = headers + [ 'Used EcuDefinition file: ' + config[0][0] ]
-   headers = headers + [ '' ]
-   headers = headers + [ 'ECU identified with following data:' ]
-   headers = headers + [ 'HWNumber    = ' + config[0][6] ]
-   headers = headers + [ 'SWNumber    = ' + config[0][7] ]
-   headers = headers + [ 'PartNumber  = ' + config[0][8] ]
-   headers = headers + [ 'SWVersion   = ' + config[0][9] ]
-   headers = headers + [ 'EngineId    = ' + config[0][10] ]
-   headers = headers + [ 'VAGHWNumber = ' ]
-   headers = headers + [ 'ModelId     = ' + config[0][11] ]
-   headers = headers + [ '' ]
-   headers = headers + [ 'Log packet size: ' + str(config[0][12]) + ' bytes' ]
-   headers = headers + [ 'Logging with:    ' + config[0][1] + ' samples/second  * Disabled *' ]
-   headers = headers + [ 'Used speed is:   ' + config[0][5] + ' baud' ]
-   headers = headers + [ 'Used mode is:    ' + config[0][4] + '                 * Disabled *']
-
-   t = time.localtime(time.time())
-   timestamp = str(t[2]).rjust(2,'0') + '.' + str(t[1]).rjust(2,'0') + '.' + str(t[0]) + ' ' 
-   timestamp = timestamp + str(t[3]).rjust(2,'0') + ':' + str(t[4]).rjust(2,'0') + ':' + str(t[5]).rjust(2,'0')  
-   headers = headers + [ 'Log started at:  ' + timestamp ]
-   headers = headers + [ '' ]
-
-   header1 = "TimeStamp, "
-   header2 = "sec.ms, "
-   header3 = "Time, "
-   for i in range(1,len(config)):
-      header1 = header1 + config[i][0]
-      unit = config[i][5]
-      if unit[0] == '{':
-         unit = unit[1:]
-      if unit[-1] == '}':
-         unit = unit[:-1] 
-      header2 = header2 + unit
-      header3 = header3 + config[i][1]
-      if i < len(config)-1:
-         header1 = header1 + ', '
-         header2 = header2 + ', '
-         header3 = header3 + ', '
-   headers = headers + [ header1 ] + [ header2 ] + [ header3 ]
-   return headers
-
-def loglocations(config):
-   # Parses the config info and creates the byte list to tell the ECU the memory locations to log.
-   response = []
-   sendlist = [ 0xb7 ]                           # is 0xB7 the "locator?"
-   sendlist = sendlist + [ 0x03 ]                # Number of bytes per field ?
-
-   logpacketsize = 0 
-   for i in range(1,len(config)):
-      addrstring = config[i][2]
-      size = config[i][3]
-      if ( size == '1' ):                        # one byte or two 
-         sendlist = sendlist + [ int(addrstring[:4],16) ]
-      elif (size == '2' ):
-         sendlist = sendlist + [ ( int(addrstring[:4],16) + 0x40 ) ]
-      sendlist = sendlist + [ int(('0x' + addrstring[4:6]), 16) ]
-      sendlist = sendlist + [ int(('0x' + addrstring[6:8]), 16) ]
-      logpacketsize = logpacketsize + int(size)
-   sendcommand(sendlist)
-   response = getresponse()
-   return [ sendlist, response, logpacketsize ]
- 
  
 def parselogdata(config, logdata, starttime):
    # Takes the raw logged values and applies the conversions from the ECU config file.
@@ -569,71 +143,44 @@ def main(debug):
 
       print("...sined")
 
-      ecuconnect = False
-     
-      while ecuconnect == False:
-         print("Attempting ECU connect: " + config[0][3] )
-         ser.close()
-         time.sleep(1)
 
-         #Bit bang the K-line to start the handshake (byte, baudrate)
-         bbseq = [ 0x11 ]
-         bbang(bbseq)
-   
-         #Switch to serial communication
-         ser.open()
-         ser.ftdi_fn.ftdi_set_line_property(8, 1, 0)
-         ser.baudrate = 10400
-         ser.flush()
- 
-
-         # Wait for ECU response to bit bang
-         waithex = [ 0x55, 0xef, 0x8f, 1 ]
-         waitfor(waithex)
-
-         # Wait a bit 
-         time.sleep(.026)
-
-         # Send 0x70
-         sendqueueadd([ 0x70 ])
-
-         # 0xee means that we're talking to the ECU
-         waithex = [ 0xee, 1 ]
-         response = waitfor(waithex)
-         if response[0] == True:
-             ecuconnect = True
-         else:
-             print("ECU Connect Failed.  Retrying.")
+      ecu = pylibme7.Ecu()
+      ecu.initialize(config[0][3])
 
       print("....sealed")
 
       print("Connected at 14400")
-      response = readecuid([ 0x94 ])
+      response = ecu.readecuid([ 0x94 ])
       swnumber = textlist(response)
-      # Insert software number checking here
  
-      response = startdiagsession(int(config[0][5]))
+      response = ecu.startdiagsession(int(config[0][5]))
       if debug >= 3:  print("startdiagsession(" + config[0][5] +") response: " + hexlist(response) )
       print("Connected at " + config[0][5] )
 
-      response = accesstimingparameter()
+      p2min = [ 0x00 ]
+      p2max = [ 0x01 ]
+      p3min = [ 0x00 ]
+      p3max = [ 0x14 ]
+      p4min = [ 0x00 ]
+      accesstiming = p2min + p2max + p3min + p3max + p4min
+      response = ecu.accesstimingparameter(accesstiming)
       if debug >= 3:  print("accesstimingparameter() response: " + hexlist(response) )
  
       print("Timing Set, reading and preparing memory")
 
       # I don't know how this is used.  Is it really ECU Scaling?
-      ecuid_0x81 = readecuid([ 0x81 ])
+      ecuid_0x81 = ecu.readecuid([ 0x81 ])
       if debug >= 3:  print("ecuid_0x81 =" + hexlist(ecuid_0x81) )
 
-      response = readecuid([ 0x94 ])
+      response = ecu.readecuid([ 0x94 ])
       swnumber = textlist(response)
       if debug >= 3:  print("SWNumber =" + swnumber)
 
-      response = readecuid([ 0x92 ])
+      response = ecu.readecuid([ 0x92 ])
       hwnumber = textlist(response)
       if debug >= 3:  print("HWNumber =" + hwnumber)
 
-      response = readecuid([ 0x9b ])
+      response = ecu.readecuid([ 0x9b ])
       partraw = textlist(response)
       if debug >= 3:  print("partraw  =" + partraw)
       partnumber = partraw[:12]
@@ -644,7 +191,7 @@ def main(debug):
       config[0] = config [0] + [ modelid ]
 
       #I don't know how this is used.
-      ecuid_0x9c = readecuid([ 0x9c ])
+      ecuid_0x9c = ecu.readecuid([ 0x9c ])
       if debug >= 3:  print("exuid_0x9c =" + hexlist(ecuid_0x9c) )
 
       # Check ECU values versus config file
@@ -694,7 +241,7 @@ def main(debug):
          memaddrlow = [ 0xb0 ]
          memsize = [ 0x04 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize 
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
    
          memaddrhi = [ 0x00 ]
@@ -702,12 +249,12 @@ def main(debug):
          memaddrlow = [ 0x28 ]
          memsize = [ 0x04 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
    
          # Why is this extra 0x00 needed?
-         sendqueueadd( [ 0x00 ] )
-         recvqueueget(1)
+         ecu.send( [ 0x00 ] )
+         ecu.recv(1)
 
          # Write to memory
          memaddrhi = [ 0x38 ]
@@ -719,11 +266,11 @@ def main(debug):
          for i in range(32): 
             memvalues = memvalues + [ 0xc6, 0x7a, 0x38, 0x0 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )   # Response = 0x7d + memory address
+         response = ecu.writemembyaddr(request)   # Response = 0x7d + memory address
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
-         sendqueueadd( [ 0x00 ] )                          # Why is this extra 0x00 needed?
-         recvqueueget(1)
+         ecu.send( [ 0x00 ] )                          # Why is this extra 0x00 needed?
+         ecu.recv(1)
 
          # Write to memory
          memaddrhi = [ 0x38 ]
@@ -737,11 +284,11 @@ def main(debug):
          # Then load the following hex into memory.  I don't know what this hex does yet. 
          memvalues = memvalues + [ 0x62, 0xa7, 0x81, 0x0, 0x0, 0x0, 0xf2, 0xf4, 0xce, 0xe1, 0xa9, 0x84, 0x47, 0xf8, 0xb7, 0x0, 0x2d, 0x26, 0xd7, 0x10, 0x38, 0x0, 0xf2, 0xf4, 0xc0, 0x7a, 0xf2, 0xf5, 0xc2, 0x7a, 0x2d, 0x1d, 0x88, 0x80, 0x88, 0x70, 0x88, 0x60, 0xe6, 0xf8, 0x5e, 0x0, 0xe6, 0xf7, 0x4, 0x7a, 0x8, 0x44, 0xdc, 0x5, 0x98, 0x64, 0xd7, 0x0, 0x38, 0x0, 0xb8, 0x67, 0x8, 0x72, 0x2, 0xf8, 0x1e, 0xff ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )   # Response = 0x7d + memory address
+         response = ecu.writemembyaddr( request )   # Response = 0x7d + memory address
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
-         sendqueueadd( [ 0x00 ] )                          # Why is this extra 0x00 needed?
-         recvqueueget(1)
+         ecu.send( [ 0x00 ] )                          # Why is this extra 0x00 needed?
+         ecu.recv(1)
 
          # Write to memory
          memaddrhi = [ 0x38 ]
@@ -751,11 +298,11 @@ def main(debug):
          # No idea what this does yet:
          memvalues = [ 0x70, 0x88, 0xed, 0xf6, 0xf2, 0xf4, 0x1c, 0xff, 0xd7, 0x10, 0x38, 0x0, 0xf6, 0xf4, 0xc0, 0x7a, 0xf6, 0xf4, 0xc2, 0x7a, 0x98, 0x60, 0x98, 0x70, 0x98, 0x80, 0xfa, 0x0, 0x66, 0x3b, 0x88, 0xb0, 0x88, 0xa0, 0x88, 0x90, 0x88, 0x80, 0x88, 0x70, 0x88, 0x60, 0xe1, 0xf, 0xf2, 0xf4, 0xca, 0xe1, 0x49, 0x81, 0x2d, 0x4, 0xf2, 0xf4, 0xce, 0xe1, 0x8, 0x41, 0x99, 0xf4, 0x49, 0xf0, 0x2d, 0x5, 0x49, 0xf3, 0x2d, 0x31, 0x49, 0xf4, 0x2d, 0x2f, 0xd, 0x6c, 0xf0, 0x9c, 0xe7, 0xf8, 0xf7, 0x0, 0xb9, 0x89, 0x8, 0x91, 0xe6, 0xfa, 0x80, 0x7c, 0xe6, 0xfb, 0x38, 0x0, 0xd7, 0x0, 0x38, 0x0, 0xf3, 0xfc, 0xc4, 0x7a, 0x67, 0xfc, 0x7f, 0x0, 0x2d, 0x11, 0xdc, 0x1b, 0x98, 0x4a, 0x98, 0x5a, 0xf1, 0xeb, 0xe1, 0xb, 0x49, 0xe2, 0x2d, 0x4, 0xdc, 0x5, 0x99, 0xd4, 0xb9, 0xd9, 0x8, 0x91 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )   # Response = 0x7d + memory address
+         response = ecu.writemembyaddr( request )   # Response = 0x7d + memory address
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
-         sendqueueadd( [ 0x00 ] )                          # Why is this extra 0x00 needed?
-         recvqueueget(1)
+         ecu.send( [ 0x00 ] )                          # Why is this extra 0x00 needed?
+         ecu.recv(1)
 
          # Write to memory
          memaddrhi = [ 0x38 ]
@@ -765,11 +312,11 @@ def main(debug):
          # No idea what this does yet:
          memvalues = [ 0xdc, 0x5, 0x99, 0xd4, 0xb9, 0xd9, 0x8, 0x91, 0x29, 0xc1, 0x3d, 0xef, 0xf0, 0x49, 0x20, 0x4c, 0xe6, 0xf6, 0x0, 0x8, 0x74, 0xf6, 0x74, 0xe0, 0x98, 0x60, 0x98, 0x70, 0x98, 0x80, 0x98, 0x90, 0x98, 0xa0, 0x98, 0xb0, 0xdb, 0x0, 0xf2, 0xf4, 0xca, 0xe1, 0x29, 0x82, 0xf1, 0xa8, 0xe1, 0xb, 0xe6, 0xfa, 0x80, 0x7c, 0xe6, 0xfb, 0x38, 0x0, 0x49, 0xf3, 0x2d, 0x9, 0x6, 0xfa, 0x0, 0x1, 0xd7, 0x0, 0x38, 0x0, 0xf3, 0xfb, 0xc4, 0x7a, 0x47, 0xfb, 0x40, 0x0, 0x3d, 0xfe, 0xf2, 0xf4, 0xce, 0xe1, 0x8, 0x42, 0x49, 0xa3, 0x8d, 0x19, 0x99, 0xe4, 0x99, 0xd4, 0x99, 0xc4, 0xf1, 0xfe, 0x67, 0xfe, 0xbf, 0x0, 0xdc, 0x2b, 0xb9, 0xca, 0x8, 0xa1, 0xb9, 0xda, 0x8, 0xa1, 0xdc, 0xb, 0xb9, 0xea, 0x8, 0xa1, 0xe1, 0x1e, 0x67, 0xff, 0x40, 0x0, 0x3d, 0x1, 0x9, 0xe1, 0xdc, 0xb ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )   # Response = 0x7d + memory address
+         response = ecu.writemembyaddr( request )   # Response = 0x7d + memory address
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
-         sendqueueadd( [ 0x00 ] )                          # Why is this extra 0x00 needed?
-         recvqueueget(1)
+         ecu.send( [ 0x00 ] )                          # Why is this extra 0x00 needed?
+         ecu.recv(1)
 
          # Write to memory
          memaddrhi = [ 0x38 ]
@@ -779,7 +326,7 @@ def main(debug):
          # No idea what this does yet:
          memvalues = [ 0xb9, 0xea, 0x8, 0xa1, 0x9, 0xb1, 0x29, 0xa3, 0xd, 0xe5, 0x67, 0xfb, 0x7f, 0x0, 0xd7, 0x0, 0x38, 0x0, 0xf7, 0xfb, 0xc4, 0x7a, 0xf0, 0x9c, 0xe7, 0xf8, 0xf7, 0x0, 0xb9, 0x89, 0xe0, 0x14, 0xd, 0xb7, 0xe6, 0xf4, 0xff, 0xf7, 0x64, 0xf4, 0x74, 0xe0, 0xf0, 0xe9, 0xe7, 0xf8, 0x7f, 0x0, 0xb9, 0x8e, 0x8, 0xe1, 0xe7, 0xf8, 0xb7, 0x0, 0xb9, 0x8e, 0x8, 0xe1, 0xe7, 0xf8, 0x12, 0x0, 0xb9, 0x8e, 0xe1, 0x38, 0xd, 0xa9 ] 
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )   
+         response = ecu.writemembyaddr( request )   
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
          # Read back what we wrote earlier  
@@ -788,7 +335,7 @@ def main(debug):
          memaddrlow = [ 0x00 ]
          memsize = [ 0x80 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
          memaddrhi = [ 0x38 ]
@@ -796,7 +343,7 @@ def main(debug):
          memaddrlow = [ 0x80 ]
          memsize = [ 0x80 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
          memaddrhi = [ 0x38 ]
@@ -804,7 +351,7 @@ def main(debug):
          memaddrlow = [ 0x80 ]
          memsize = [ 0x80 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
          memaddrhi = [ 0x38 ]
@@ -812,7 +359,7 @@ def main(debug):
          memaddrlow = [ 0x00 ]
          memsize = [ 0x46 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize
-         response = readmembyaddr( request )
+         response = ecu.readmembyaddr( request )
          if debug >= 3:  print("readmembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
          # Write to memory
@@ -822,20 +369,21 @@ def main(debug):
          memsize = [ 0x04 ]
          memvalues = [ 0x00, 0x3a, 0xe1, 0x00 ]
          request = memaddrhi + memaddrmid + memaddrlow + memsize + memvalues
-         response = writemembyaddr( request )
+         response = ecu.writemembyaddr( request )
          if debug >= 3:  print("writemembyaddr(): request: " + hexlist(request) + " response: " + hexlist(response) )
 
-         response = testerpresent()
+         response = ecu.testerpresent()
          if debug >= 3:  print("testerpresent(): response: " + hexlist(response))
 
-         sendqueueadd( [ 0x00 ] )                          # Why is this extra 0x00 needed?
-         recvqueueget(1)   
+         ecu.send( [ 0x00 ] )                          # Why is this extra 0x00 needed?
+         ecu.recv(1)   
 
          # Tell ECU memory locations to log, based on the config and ecu file data:
-         response = loglocations(config)
-         if debug >= 3:  print("loglocations(): request: " + hexlist(response[0]) + " response: " + hexlist(response[1]) )
+         logline = loglocations(config)
+         response = ecu.setuplogrecord(logline[0])
+         if debug >= 3:  print("loglocations(): request: " + hexlist(logline[0]) + " response: " + hexlist(response) )
          # grab logpacketsize from loglocations() return and tack it to the end of ecu config info
-         config[0] = config[0] + [ response[2] ]
+         config[0] = config[0] + [ logline[1] ]
 
          print(".....delivered")
          if str(args.outputfile) != 'None':
@@ -856,7 +404,7 @@ def main(debug):
 
          while True:
             timerstart = time.time()
-            response = getrecord()
+            response = ecu.getlogrecord()
             if debug >= 3:  print("getrecord(): request: [ 0xb7 ] response: " + hexlist(response))
 
             # Pipe log output to parser, based on info pulled from the config and ecu files
@@ -877,7 +425,7 @@ def main(debug):
             timerfinish = time.time()
             adjust = (timerfinish-timerstart)
             if adjust < samplerate:
-               time.sleep((samplerate)-(timerfinish-timerstart))	                  # I'd love to do this but it's too slow already!
+               time.sleep((samplerate)-(timerfinish-timerstart))
 
       else:
          print("Config check failed")
@@ -889,12 +437,8 @@ def main(debug):
    sys.stdout.write('\r')
    sys.stdout.flush()
    
-   # Shut down the thread and wrap things up.
-   # controlqueue.put(["end"])
-   # time.sleep(1)
-   
+   # Wrap things up.
    outfile.flush()
-   
    print("Logging Finished")
 
 
