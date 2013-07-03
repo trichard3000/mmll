@@ -25,7 +25,7 @@ Notes:
 
 This is a very basic logger for Bosch ME7 ECU's, common in many Volkswagen 
 and Audi cars from the late 1990's to the early 2000's. There are many, many 
-cars that for which this won't work.  I'm sorry if your car is one of them.
+cars for which this won't work.  I'm sorry if your car is one of them.
 
 This is a very early version.  Bugs are to be expected.
 
@@ -64,7 +64,6 @@ Your results may vary.
 
 --
 trichard3000
-
 
 +++++
 
