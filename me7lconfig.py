@@ -166,9 +166,9 @@ def logheader(config):
    headers = headers + [ 'ModelId     = ' + config[0][11] ]
    headers = headers + [ '' ]
    headers = headers + [ 'Log packet size: ' + str(config[0][12]) + ' bytes' ]
-   headers = headers + [ 'Logging with:    ' + config[0][1] + ' samples/second  * Disabled *' ]
+   headers = headers + [ 'Logging with:    ' + config[0][1] + ' samples/second' ]
    headers = headers + [ 'Used speed is:   ' + config[0][5] + ' baud' ]
-   headers = headers + [ 'Used mode is:    ' + config[0][4] + '                 * Disabled *']
+   headers = headers + [ 'Used mode is:    ' + config[0][4] + '              * Disabled *']
 
    t = time.localtime(time.time())
    timestamp = str(t[2]).rjust(2,'0') + '.' + str(t[1]).rjust(2,'0') + '.' + str(t[0]) + ' ' 
