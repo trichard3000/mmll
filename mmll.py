@@ -88,7 +88,7 @@ def parselogdata(config, logdata, starttime):
       byteconv = ""
       # Read bytes in reverse order.
       for j in range(len(bytes)):
-         byteconv = hex(bytes[j])[2:].ljust(2,'0') + byteconv 
+         byteconv = hex(bytes[j])[2:].rjust(2,'0') + byteconv 
          internal = int('0x'+byteconv, 16)
       
       # bitmask code eeds tested
